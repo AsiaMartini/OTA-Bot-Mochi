@@ -260,6 +260,11 @@ complaint; the agent did not listen to or test physical audio.
 
 ## Touch, IMU and settings
 
+- [ ] **Quick controls** — Needs hardware: check top-edge pull, swipe up,
+  rotated touch targets, animation cadence, face restoration and all three
+  shortcuts on LCD OLD and AMOLED V2. Check Find phone with Android connected
+  and disconnected, and while using iPhone mode.
+
 - [x] Physically verify larger Settings face-picker/count controls and Dice ROLL/DETAILS lower-strip taps on LCD OLD and AMOLED V2, including edges, finger drift, swipes, and return navigation. Native hit-boundary fixtures do not establish real touch comfort.
 - [x] Physically check dice shake/cooldown with face shake disabled and Flappy Bird tap/collision/page-call pause behavior on LCD OLD and AMOLED V2. Host fixtures do not establish touch response, real shake sensitivity or display cadence.
 - [x] Compile and physically check the Games layer below Scrivania and D&D dice on LCD OLD/AMOLED V2: type/count controls, maximum 100D100 legibility, result paging, navigation, phone-mode visibility and unchanged results after redraw. Native tests do not prove physical touch usability or random-source quality.

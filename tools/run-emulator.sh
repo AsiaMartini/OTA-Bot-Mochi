@@ -58,6 +58,7 @@ runtime=(
 	"$root/OTA-bot-Mochi/src/eyes/eye_lids.cpp"
 	"$root/OTA-bot-Mochi/src/ui/view_state.cpp"
 	"$root/OTA-bot-Mochi/src/ui/ui_theme.cpp"
+	"$root/OTA-bot-Mochi/src/ui/quick_panel.cpp"
 	"$root/OTA-bot-Mochi/src/ui/ui_state.cpp"
 	"$root/OTA-bot-Mochi/src/ui/i18n.cpp"
 	"$root/OTA-bot-Mochi/src/ui/weather_sync.cpp"

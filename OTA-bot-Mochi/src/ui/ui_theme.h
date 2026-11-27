@@ -7,6 +7,7 @@
 #include <Arduino_GFX_Library.h>
 
 constexpr uint16_t UI_BG = 0x0000;
+constexpr uint16_t UI_CHARGING = 0x07FF;
 /** @brief Blend RGB565 colors with opacity in the range 0–256. */
 inline uint16_t ui_mix(uint16_t base, uint16_t ink, uint16_t opacity) {
 	const uint32_t keep = 256 - opacity;
@@ -99,21 +100,38 @@ void ui_bar(Arduino_GFX *gfx, int16_t x, int16_t y, int16_t w, int16_t h, int32_
  * @param gfx Canvas. @param y Top (design). @param good State is healthy. @param text Label.
  */
 void ui_status(Arduino_GFX *gfx, int16_t y, bool good, const String &text);
+/** @brief Values visible in the shared status strip. Zero timer seconds hides the countdown. */
+struct UiStatusBar {
+	uint32_t timer_seconds = 0;
+	uint8_t battery = 255;
+	bool charging = false, phone_warning = false, audible = false;
+
+	bool operator==(const UiStatusBar &other) const {
+		return timer_seconds == other.timer_seconds && battery == other.battery && charging == other.charging &&
+			phone_warning == other.phone_warning && audible == other.audible;
+	}
+	bool operator!=(const UiStatusBar &other) const { return !(*this == other); }
+};
+
+/** @brief Paint the shared status row without clearing the page title or controls. */
+void ui_status_bar(Arduino_GFX *gfx, const UiStatusBar &status, uint16_t background = UI_BG);
 /**
  * @brief Draw the shared header and screen position dots.
  * @param gfx Canvas.
  * @param title Screen name.
- * @param connected Bluetooth flag.
+ * @param status Shared status indicators.
  * @param page Selected screen index.
  */
-void ui_chrome(Arduino_GFX *gfx, const char *title, bool connected, uint8_t page, bool settings_page = false);
+void ui_chrome(Arduino_GFX *gfx, const char *title, const UiStatusBar &status, uint8_t page, bool settings_page = false);
 /**
  * @brief Draw a compact speaker glyph showing whether audio can sound.
  * @param gfx Canvas.
  * @param x Left edge; glyph spans x..x+21 and y..y+12.
  * @param y Top edge.
  */
-void ui_sound_badge(Arduino_GFX *gfx, int16_t x, int16_t y);
+void ui_sound_badge(Arduino_GFX *gfx, int16_t x, int16_t y, int16_t scale = 100);
+/** @brief Draw the shared speaker glyph with waves or a mute cross, scaled from its 22 x 13 footprint. */
+void ui_speaker_icon(Arduino_GFX *gfx, int16_t x, int16_t y, uint16_t ink, bool muted, int16_t scale);
 /**
  * @brief Draw a battery outline and inset bolt while the PMU reports charging.
  * @param gfx Canvas.
@@ -121,6 +139,8 @@ void ui_sound_badge(Arduino_GFX *gfx, int16_t x, int16_t y);
  * @param y Top edge.
  */
 void ui_charge_badge(Arduino_GFX *gfx, int16_t x, int16_t y);
+/** @brief Draw the battery outline, percentage and optional inset charging bolt. */
+void ui_battery_indicator(Arduino_GFX *gfx, int16_t x, int16_t y, uint8_t charge, bool charging);
 /**
  * @brief Draw a calm empty state.
  * @param gfx Canvas.

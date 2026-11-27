@@ -29,6 +29,7 @@
 #include "../power/battery.h"
 #include "../power/charging.h"
 #include "../companion/companion_state.h"
+#include "../sound/sound.h"
 
 namespace {
 UiSnapshot cached;
@@ -41,18 +42,39 @@ bool save_glow_painted = false;
 uint32_t preferences_revision = UINT32_MAX;
 uint32_t presentation_revision = UINT32_MAX;
 uint8_t previous_brightness = 255;
-uint8_t previous_battery = BATTERY_UNAVAILABLE;
-bool previous_charging = false;
+UiStatusBar status_bar;
+bool phone_offline = false;
+uint32_t phone_offline_since = 0;
 uint32_t companion_revision = UINT32_MAX;
 UiPage previous_page = UiPage::Eyes;
 
-/** @brief Invalidate chrome when local power, brightness, presentation or phone tools change. */
-void invalidate_status() {
-	uint8_t battery = battery_percent();
-	bool charging = charging_active();
+/** @brief Display the phone warning only for sustained disconnections. */
+bool phone_warning(uint32_t now) {
+	if (!cached.connected && !phone_offline) { phone_offline_since = now; }
+	phone_offline = !cached.connected;
+	return phone_offline && now - phone_offline_since >= 2500;
+}
+
+/** @brief Track whole seconds, or whole minutes for the long countdown label. */
+uint32_t countdown_status() {
+	const auto &timer = view_timer();
+	if (!timer.running || timer.mode == DeskTimer::STOPWATCH) { return 0; }
+	const uint32_t seconds = (timer.remaining + 999) / 1000;
+	return seconds >= 6000 ? (seconds + 59) / 60 * 60 : seconds;
+}
+
+/** @brief Refresh the status strip and invalidate chrome when its displayed values change. */
+void invalidate_status(uint32_t now, bool header_visible) {
+	const auto audio = sound_status();
+	const UiStatusBar next{countdown_status(), battery_percent(), charging_active(), phone_warning(now),
+		audio == SoundStatus::Armed || audio == SoundStatus::Ready};
+	if (next != status_bar) {
+		status_bar = next;
+		if (header_visible) { invalidated = true; }
+	}
 	uint32_t phone_revision = companion_snapshot().revision;
-	if (battery != previous_battery || charging != previous_charging || phone_revision != companion_revision) {
-		previous_battery = battery; previous_charging = charging; companion_revision = phone_revision; invalidated = true;
+	if (phone_revision != companion_revision) {
+		companion_revision = phone_revision; invalidated = true;
 	}
 	if (view_revision() != presentation_revision || backlight_brightness() != previous_brightness) {
 		presentation_revision = view_revision(); previous_brightness = backlight_brightness(); invalidated = true;
@@ -258,6 +280,8 @@ void content(Arduino_GFX *gfx, ChronosESP32 &watch, UiPage page, uint32_t now) {
 /** @brief Force repaint after a gesture. */
 void screens_invalidate() { invalidated = true; clock_invalidate(); }
 
+const UiStatusBar &screens_status_bar() { return status_bar; }
+
 /** @brief Guard alert actions against asynchronous replacement of the visible entry. @param action Newer/dismiss/older. */
 void screens_alert_action(int8_t action) {
 	if (overlay_active) { return; }
@@ -292,11 +316,11 @@ bool screens_draw(Arduino_GFX *gfx, ChronosESP32 &watch, UiPage page, uint32_t n
 	uint16_t *pixels, bool flipped) {
 	if (page == UiPage::Phone && settings_get().phone_ios) { page = UiPage::Desk; }
 	view_timer().tick(now);
-	invalidate_status();
 	if (uint8_t(page) >= uint8_t(UiPage::Count)) { page = UiPage::Eyes; }
 	uint32_t next_revision = ui_revision();
 	bool changed = next_revision != revision;
 	if (changed) { cached = ui_snapshot(); revision = cached.revision; }
+	invalidate_status(now, page != UiPage::Eyes || cached.calling);
 	uint32_t next_preferences = settings_revision();
 	if (next_preferences != preferences_revision) {
 		preferences_revision = next_preferences;
@@ -345,7 +369,7 @@ bool screens_draw(Arduino_GFX *gfx, ChronosESP32 &watch, UiPage page, uint32_t n
 			Text::DriveHubTitle, Text::DriveBigLean, Text::DriveGMeter, Text::DriveGraphTitle, Text::DriveTrip, Text::DriveObd};
 		static_assert(sizeof(titles) / sizeof(titles[0]) == uint8_t(UiPage::Count), "Every page needs a title");
 		ui_chrome(gfx, tr(overlay_active ? Text::CallTitle : titles[uint8_t(page)]),
-			cached.connected, uint8_t(screens_parent(page)), settings_visible);
+			status_bar, uint8_t(screens_parent(page)), settings_visible);
 		clock_invalidate();
 	}
 	if (page == UiPage::Clock && !overlay_active) {

@@ -8,8 +8,8 @@
 #include "../../pin_config.h"
 #include "../power/backlight.h"
 #include "../power/battery.h"
-#include "../power/charging.h"
 #include "../sound/sound.h"
+#include <cstdio>
 
 uint16_t UI_CARD = 0x1082;
 uint16_t UI_LINE = 0x2945;
@@ -150,25 +150,50 @@ void ui_card(Arduino_GFX *gfx, int16_t y, int16_t height) {
  * @param x Left edge.
  * @param y Top edge.
  */
-void ui_sound_badge(Arduino_GFX *gfx, int16_t x, int16_t y) {
+void ui_sound_badge(Arduino_GFX *gfx, int16_t x, int16_t y, int16_t scale) {
 	SoundStatus audio = sound_status();
 	bool audible = audio == SoundStatus::Armed || audio == SoundStatus::Ready;
-	uint16_t color = audible ? UI_ACCENT : UI_MUTED;
-	gfx->fillRect(x, y + 4, 5, 5, color);
-	gfx->fillTriangle(x + 4, y + 4, x + 10, y, x + 10, y + 12, color);
-	gfx->fillTriangle(x + 4, y + 4, x + 10, y + 12, x + 4, y + 8, color);
-	if (audible) {
-		gfx->drawLine(x + 14, y + 3, x + 16, y + 5, color);
-		gfx->drawLine(x + 16, y + 5, x + 16, y + 7, color);
-		gfx->drawLine(x + 16, y + 7, x + 14, y + 9, color);
-		gfx->drawLine(x + 17, y, x + 20, y + 3, color);
-		gfx->drawLine(x + 20, y + 3, x + 21, y + 6, color);
-		gfx->drawLine(x + 21, y + 6, x + 20, y + 9, color);
-		gfx->drawLine(x + 20, y + 9, x + 17, y + 12, color);
+	ui_speaker_icon(gfx, x, y, audible ? UI_ACCENT : UI_MUTED, !audible, scale);
+}
+
+void ui_speaker_icon(Arduino_GFX *gfx, int16_t x, int16_t y, uint16_t ink, bool muted, int16_t scale) {
+	const auto s = [scale](int value) { return int16_t(value * scale / 100); };
+	const auto line = [&](int x1, int y1, int x2, int y2) {
+		gfx->drawLine(x + s(x1), y + s(y1), x + s(x2), y + s(y2), ink);
+	};
+	gfx->fillRect(x, y + s(4), s(5), s(5), ink);
+	gfx->fillTriangle(x + s(4), y + s(4), x + s(10), y, x + s(10), y + s(12), ink);
+	gfx->fillTriangle(x + s(4), y + s(4), x + s(10), y + s(12), x + s(4), y + s(8), ink);
+	if (!muted) {
+		line(14, 3, 16, 5);
+		line(16, 5, 16, 7);
+		line(16, 7, 14, 9);
+		line(17, 0, 20, 3);
+		line(20, 3, 21, 6);
+		line(21, 6, 20, 9);
+		line(20, 9, 17, 12);
 	} else {
-		gfx->drawLine(x + 14, y + 2, x + 20, y + 10, color);
-		gfx->drawLine(x + 20, y + 2, x + 14, y + 10, color);
+		line(14, 2, 20, 10);
+		line(20, 2, 14, 10);
 	}
+}
+
+namespace {
+/** @brief Fit three digits at full charge or the bolt and two digits while charging. */
+int16_t status_battery_width() { return ui_s(ui_font::Supported ? 43 : 50); }
+
+/** @brief Draw a compact charging bolt in a 5 x 8 design box. */
+void charge_bolt(Arduino_GFX *gfx, int16_t x, int16_t y, uint16_t ink, int16_t scale) {
+	const auto s = [scale](int value) { return int16_t(value * scale / 100); };
+	gfx->fillTriangle(x + s(3), y, x, y + s(4), x + s(2), y + s(4), ink);
+	gfx->fillTriangle(x + s(1), y + s(7), x + s(4), y + s(3), x + s(2), y + s(3), ink);
+}
+
+/** @brief Show a slashed phone outline without relying on a status color. */
+void disconnected_phone(Arduino_GFX *gfx, int16_t x, int16_t y, int16_t height) {
+	gfx->drawRoundRect(x + ui_s(2), y, ui_s(10), height, ui_s(2), UI_MUTED);
+	gfx->drawLine(x, y + height - 1, x + ui_s(12), y, UI_MUTED);
+}
 }
 
 /**
@@ -181,32 +206,72 @@ void ui_charge_badge(Arduino_GFX *gfx, int16_t x, int16_t y) {
 	uint16_t color = UI_ACCENT;
 	gfx->fillRect(x + 2, y, 4, 2, color);
 	gfx->drawRect(x, y + 2, 8, 11, color);
-	gfx->fillTriangle(x + 5, y + 4, x + 2, y + 8, x + 4, y + 8, color);
-	gfx->fillTriangle(x + 3, y + 11, x + 6, y + 7, x + 4, y + 7, color);
+	charge_bolt(gfx, x + 2, y + 4, color, 100);
+}
+
+void ui_battery_indicator(Arduino_GFX *gfx, int16_t x, int16_t y, uint8_t charge, bool charging) {
+	const int16_t w = status_battery_width(), h = ui_s(16), radius = ui_s(4);
+	const int16_t center = y + h / 2, terminal = ui_s(5);
+	const uint16_t rim = charging ? UI_CHARGING : UI_MUTED;
+	gfx->fillRoundRect(x, y, w, h, radius, UI_CARD);
+	gfx->drawRoundRect(x, y, w, h, radius, rim);
+	gfx->fillRoundRect(x + w, center - terminal / 2, ui_s(3), terminal, ui_s(1), rim);
+	if (charging && charge != 100) {
+		const int16_t scale = ui_scale() * 125 / 100, height = 7 * scale / 100 + 1;
+		charge_bolt(gfx, x + ui_s(7), center - height / 2, UI_CHARGING, scale);
+	}
+	const String label = charge == BATTERY_UNAVAILABLE ? String("--%") : String(charge) + "%";
+	const int16_t right = x + w - ui_s(5);
+	if (!ui_font::draw_inter_tabular(gfx, label, right, center, UI_TEXT, UI_CARD)) {
+		const int16_t label_width = ui_font::width(label, 1);
+		ui_label(gfx, label, right - label_width, center - ui_font::height(1) / 2, label_width, 1, UI_TEXT);
+	}
+}
+
+namespace {
+/** @brief Fit a running countdown in a compact, neutral card with no outline. */
+void timer_pill(Arduino_GFX *gfx, uint32_t seconds, int16_t center) {
+	char text[8];
+	const unsigned minutes = unsigned(seconds / 60);
+	if (minutes >= 100) { std::snprintf(text, sizeof(text), "%uh%02u", minutes / 60, minutes % 60); }
+	else { std::snprintf(text, sizeof(text), "%02u:%02u", minutes, unsigned(seconds % 60)); }
+	const int16_t w = ui_s(35), h = ui_s(16), mid = LCD_WIDTH / 2;
+	gfx->fillRoundRect(mid - w / 2, center - h / 2, w, h, h / 2, UI_CARD);
+	if (!ui_font::draw_inter_tabular(gfx, text, mid, center, UI_TEXT, UI_CARD, true)) {
+		const int16_t text_w = ui_font::width(text, 1);
+		ui_label(gfx, text, mid - text_w / 2, center - ui_font::height(1) / 2, text_w, 1, UI_TEXT);
+	}
+}
+}
+
+void ui_status_bar(Arduino_GFX *gfx, const UiStatusBar &status, uint16_t background) {
+	const bool rounded = ui_font::Supported;
+	const int16_t center = ui_s(16), icon_height = ui_s(14), icon_y = center - icon_height / 2;
+	const int16_t speaker_scale = ((icon_height - 1) * 100 + 11) / 12;
+	const int16_t inset = ui_s(rounded ? 13 : 5), gap = ui_s(rounded ? 2 : 3);
+	const int16_t battery_x = LCD_WIDTH - inset - ui_s(3) - status_battery_width();
+	const int16_t phone_x = battery_x - gap - ui_s(12) - 1;
+	const int16_t speaker_x = phone_x - gap - (21 * speaker_scale / 100 + 1);
+	gfx->fillRect(0, 0, LCD_WIDTH, ui_s(27), background);
+	ui_label(gfx, "MOCHI", ui_s(16), center - ui_font::height(1) / 2 + (ui_font::active() ? 2 : 1),
+		ui_s(72), 1, UI_MUTED);
+	if (status.timer_seconds) { timer_pill(gfx, status.timer_seconds, center); }
+	ui_speaker_icon(gfx, speaker_x, icon_y, status.audible ? UI_ACCENT : UI_MUTED, !status.audible, speaker_scale);
+	if (status.phone_warning) { disconnected_phone(gfx, phone_x, icon_y, icon_height); }
+	ui_battery_indicator(gfx, battery_x, center - ui_s(16) / 2, status.battery, status.charging);
 }
 
 /**
  * @brief Render header and pagination with the selected eye-color accent.
  * @param gfx Canvas.
  * @param title Screen title.
- * @param connected Bluetooth flag.
+ * @param status Shared status indicators.
  * @param page Screen index.
  * @param settings_page True when the settings footer occupies the carousel indicator area.
  */
-void ui_chrome(Arduino_GFX *gfx, const char *title, bool connected, uint8_t page, bool settings_page) {
+void ui_chrome(Arduino_GFX *gfx, const char *title, const UiStatusBar &status, uint8_t page, bool settings_page) {
 	gfx->fillRect(0, 0, LCD_WIDTH, ui_s(52), UI_BG);
-	ui_label(gfx, "MOCHI / COMPANION", ui_s(16), ui_s(12), ui_s(180), 1, UI_MUTED);
-	uint8_t charge = battery_percent();
-	bool charging = charging_active();
-	ui_label(gfx, charge == BATTERY_UNAVAILABLE ? String("--%") : String(charge) + "%",
-		ui_s(174), ui_s(12), ui_s(32), 1, charging ? UI_ACCENT : UI_MUTED);
-	if (charging) { ui_charge_badge(gfx, ui_s(208), ui_s(11)); }
-	gfx->fillCircle(ui_s(220), ui_s(16), 3, connected ? UI_ACCENT : UI_MUTED);
-	// Doubled header text ends later on scaled panels, so the badge steps aside instead of colliding.
-	int16_t badge_x = ui_s(150);
-	int16_t title_right = ui_s(16) + ui_font::width("MOCHI / COMPANION", 1);
-	if (badge_x < title_right + 8) { badge_x = int16_t(title_right + 8); }
-	ui_sound_badge(gfx, badge_x, ui_s(11));
+	ui_status_bar(gfx, status);
 	gfx->fillRoundRect(ui_s(6), ui_s(30), ui_s(4), ui_s(16), ui_s(2), UI_ACCENT);
 	ui_label(gfx, title, ui_s(16), ui_s(30), ui_s(208), 2, UI_TEXT);
 	gfx->fillRect(0, ui_s(258), LCD_WIDTH, ui_s(22), UI_BG);

@@ -26,6 +26,7 @@
 #include "../OTA-bot-Mochi/src/settings/usb_commands.h"
 #include "../OTA-bot-Mochi/src/eyes/eyes_api.h"
 #include "../OTA-bot-Mochi/src/sound/sound.h"
+#include "../OTA-bot-Mochi/src/power/battery.h"
 #include "../OTA-bot-Mochi/src/power/charging.h"
 #include "../OTA-bot-Mochi/src/bus/i2c_bus.h"
 #include "../OTA-bot-Mochi/pin_config.h"
@@ -39,6 +40,11 @@
 #include "flappy_panel_checks.h"
 #include "favorites_panel_checks.h"
 #include <string>
+
+static int status_center_y() { return ui_s(16); }
+static int status_battery_width() { return ui_s(ui_font::Supported ? 43 : 50); }
+static int status_battery_right() { return LCD_WIDTH - ui_s(ui_font::Supported ? 13 : 5); }
+static int status_battery_x() { return status_battery_right() - ui_s(3) - status_battery_width(); }
 
 /** @brief Speaker mouth faces right; mute cross and sound waves stay inside the badge. */
 static void sound_badge_checks() {
@@ -106,21 +112,108 @@ static void charging_header_checks(Arduino_GFX &gfx, ChronosESP32 &watch) {
 	assert(!charging_poll(11000));
 	assert(screens_draw(&gfx, watch, UiPage::Weather, 11000));
 	assert(!screens_draw(&gfx, watch, UiPage::Weather, 11001));
-	int x = ui_s(208), y = ui_s(11);
-	assert(gfx.pixels[y * gfx.w + x + 2] == UI_BG);
+	const int bolt_scale = ui_scale() * 125 / 100;
+	const int x = status_battery_x() + ui_s(7) + 3 * bolt_scale / 100;
+	const int y = status_center_y() - (7 * bolt_scale / 100 + 1) / 2;
+	assert(gfx.pixels[y * gfx.w + x] != UI_CHARGING);
 	assert(charging_poll(11500));
 	assert(screens_draw(&gfx, watch, UiPage::Weather, 11500));
-	assert(gfx.pixels[y * gfx.w + x + 2] == UI_ACCENT);
+	assert(gfx.pixels[y * gfx.w + x] == UI_CHARGING);
 	registers[0x01] = 0;
 	assert(!charging_poll(12000));
 	assert(screens_draw(&gfx, watch, UiPage::Weather, 12500));
 	assert(!charging_poll(12500) && !charging_active());
 	assert(screens_draw(&gfx, watch, UiPage::Weather, 12501));
-	assert(gfx.pixels[y * gfx.w + x + 2] == UI_BG);
+	assert(gfx.pixels[y * gfx.w + x] != UI_CHARGING);
 #else
 	(void)gfx; (void)watch;
 	assert(!charging_active());
 #endif
+}
+
+/** @brief The percent sign stays fixed across readings, charging and the selected UI font. */
+static void battery_indicator_checks() {
+	Arduino_GFX icon;
+	const int center = ui_s(16), h = ui_s(16), y = center - h / 2;
+	const int x = LCD_WIDTH - ui_s(66), span = status_battery_width(), right = x + span - ui_s(5);
+	const int bolt_scale = ui_scale() * 125 / 100;
+	const int bolt_x = x + ui_s(7) + 3 * bolt_scale / 100;
+	const int bolt_y = center - (7 * bolt_scale / 100 + 1) / 2;
+	const auto percent_sign = [&] {
+		std::vector<uint16_t> pixels;
+		const int width = ui_font::Supported ? 16 : 6;
+		for (int row = y + 1; row < y + h - 1; ++row) {
+			for (int col = right - width; col < right; ++col) { pixels.push_back(icon.pixels[row * icon.w + col]); }
+		}
+		return pixels;
+	};
+	const auto font = ui_font::selected;
+	ui_battery_indicator(&icon, x, y, BATTERY_UNAVAILABLE, false);
+	if (!ui_font::Supported) { assert(icon.text.back() == "--%"); }
+	assert(icon.pixels[bolt_y * icon.w + bolt_x] == UI_CARD);
+	const auto percent = percent_sign();
+	assert(std::find(percent.begin(), percent.end(), UI_TEXT) != percent.end());
+	ui_font::select(UiFont::DmSans);
+	ui_battery_indicator(&icon, x, y, 72, true);
+	assert(percent_sign() == percent);
+	assert(icon.pixels[bolt_y * icon.w + bolt_x] == UI_CHARGING);
+	ui_battery_indicator(&icon, x, y, 100, true);
+	assert(percent_sign() == percent);
+	if (!ui_font::Supported) { assert(icon.text.back() == "100%"); }
+	assert(icon.pixels[bolt_y * icon.w + bolt_x] != UI_CHARGING);
+	assert(icon.pixels[y * icon.w + x + span / 2] == UI_CHARGING);
+	assert(icon.pixels[y * icon.w + x + span - 1] == UI_BG);
+	ui_battery_indicator(&icon, x, y, 9, false);
+	assert(percent_sign() == percent);
+	ui_font::select(font);
+}
+
+/** @brief Suppress transient disconnects and repaint when a sustained disconnect becomes visible. */
+static void phone_indicator_checks(Arduino_GFX &gfx, ChronosESP32 &watch) {
+	const int gap = ui_s(ui_font::Supported ? 2 : 3);
+	const int x = status_battery_x() - gap - ui_s(12) - 1;
+	const int y = status_center_y() - ui_s(14) / 2 + ui_s(14) - 1;
+	const auto slash = [&] { return gfx.pixels[y * gfx.w + x]; };
+	ui_connection(true);
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 20000) && slash() == UI_BG);
+	ui_connection(false);
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 20010) && slash() == UI_BG);
+	screens_draw(&gfx, watch, UiPage::Weather, 22509);
+	assert(slash() == UI_BG);
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 22510) && slash() == UI_MUTED);
+	const int top = y - ui_s(14) + 1;
+	const int scale = ((ui_s(14) - 1) * 100 + 11) / 12;
+	const int speaker = x - gap - (21 * scale / 100 + 1) + 10 * scale / 100;
+	assert(gfx.pixels[top * gfx.w + speaker] != UI_BG);
+	assert(gfx.pixels[top * gfx.w + speaker] == gfx.pixels[y * gfx.w + speaker]);
+	ui_connection(true);
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 22511) && slash() == UI_BG);
+}
+
+/** @brief The status countdown appears on an unrelated page, updates and clears on pause. */
+static void timer_header_checks(Arduino_GFX &gfx, ChronosESP32 &watch) {
+	auto &timer = view_timer();
+	const auto saved = timer;
+	const size_t pill = size_t(status_center_y() - ui_s(16) / 2) * LCD_WIDTH + LCD_WIDTH / 2;
+	timer.mode = DeskTimer::FIVE_MINUTES;
+	timer.reset(30000);
+	screens_draw(&gfx, watch, UiPage::Weather, 30000);
+	assert(gfx.pixels[pill] == UI_BG);
+	timer.toggle(30020);
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 30020));
+	assert(gfx.pixels[pill] == UI_CARD && screens_status_bar().timer_seconds == 300);
+	if (ui_font::Supported) {
+		const size_t center_row = size_t(status_center_y()) * LCD_WIDTH;
+		const int terminal_end = status_battery_right();
+		assert(gfx.pixels[center_row + terminal_end - 1] == UI_MUTED);
+		for (int col = terminal_end; col < LCD_WIDTH; ++col) { assert(gfx.pixels[center_row + col] == UI_BG); }
+	}
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 31020));
+	assert(screens_status_bar().timer_seconds == 299);
+	timer.toggle(31021);
+	assert(screens_draw(&gfx, watch, UiPage::Weather, 31021));
+	assert(gfx.pixels[pill] == UI_BG && !screens_status_bar().timer_seconds);
+	timer = saved;
 }
 
 /** @brief Render every carousel and tool page once with realistic content. @param gfx Canvas. @param watch Chronos clock. */
@@ -585,7 +678,10 @@ int main() {
 	music_panel_checks(gfx, watch);
 	sound_badge_checks();
 	charge_badge_checks();
+	battery_indicator_checks();
 	charging_header_checks(gfx, watch);
+	phone_indicator_checks(gfx, watch);
+	timer_header_checks(gfx, watch);
 	page_render_checks(gfx, watch);
 	menu_checks();
 	grid_checks();

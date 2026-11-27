@@ -21,6 +21,7 @@
 #include "../OTA-bot-Mochi/src/ui/ui_state.h"
 #include "../OTA-bot-Mochi/src/ui/page_slide.h"
 #include "../OTA-bot-Mochi/src/ui/notification_glow.h"
+#include "../OTA-bot-Mochi/src/ui/quick_panel_runtime.h"
 #include "../OTA-bot-Mochi/src/ui/ui_theme.h"
 #include "../OTA-bot-Mochi/src/ui/ui_font.h"
 #include "../OTA-bot-Mochi/src/ui/view_state.h"
@@ -40,6 +41,7 @@ ChronosESP32 watch;
 UiPage page = UiPage::Eyes;
 SwipeTracker swipe;
 TouchActions actions;
+QuickPanelGesture quick_panel_gesture;
 int8_t pending_step = 0;
 bool finger = false;
 int16_t finger_x = LCD_W / 2, finger_y = LCD_H / 2;
@@ -52,6 +54,7 @@ bool console_prompt = false;
 namespace {
 AutoPagePolicy auto_policy;
 PageSlide page_slide(std::malloc);
+QuickPanel quick_panel;
 notification_glow::Pulse notification_pulse;
 notification_glow::Frame alert_frame;
 uint32_t limit_frames = 0, rendered = 0;
@@ -76,10 +79,12 @@ bool page_from_name(const std::string &name, UiPage &out) {
 }
 
 void switch_screen(UiPage next, uint32_t now, int8_t direction) {
-	if (next != page && !screens_calling()) {
+	if (next != page && !screens_calling() && !quick_panel.visible_height()) {
 		if (!direction) { direction = uint8_t(next) > uint8_t(page) ? 1 : -1; }
 		page_slide.request(gfx.pixels.data(), direction);
 	} else { page_slide.reset(); }
+	quick_panel.reset();
+	quick_panel_gesture.reset();
 	page = next;
 	gfx.fillScreen(UI_BG);
 	screens_invalidate();
@@ -164,7 +169,7 @@ void handle_auto_page(uint32_t now) {
 
 /** @brief Composite alerts without affecting the canvas used for screen rendering. */
 const std::vector<uint16_t> &visible_pixels() {
-	if (!alert_frame.opacity) { return gfx.pixels; }
+	if (!alert_frame.opacity || quick_panel_gesture.height(test_now, LCD_H)) { return gfx.pixels; }
 	static std::vector<uint16_t> output;
 	output = gfx.pixels;
 	notification_glow::draw(output.data(), false, alert_frame.elapsed, alert_frame.opacity);
@@ -198,14 +203,18 @@ void render_frame(SDL_Renderer *renderer, SDL_Texture *texture, SDL_Window *wind
 	companion_poll(watch, test_now, clock_ready());
 	SDL_SetWindowTitle(window, (std::string("Mochi LCD — ") + page_name(page)).c_str());
 	alert_frame = notification_pulse.update(notifications, test_now);
+	const int16_t panel_height = quick_panel_gesture.height(test_now, LCD_H);
+	if (panel_height) { page_slide.reset(); }
 	if (page_slide.paint(gfx.pixels.data(), test_now)) { present(renderer, texture); return; }
 	bool changed = screens_draw(&gfx, watch, page, test_now, gfx.pixels.data());
 	if (page == UiPage::Eyes && !screens_calling()) {
-		if (changed) { eyes_state().dirtyInit = false; }
-		eyes_update(test_now);
-		changed = true;
+		changed = quick_controls::draw_home(quick_panel, &gfx, gfx.pixels.data(), test_now, changed,
+			panel_height, false, settings_get().phone_ios);
+	} else {
+		quick_panel_gesture.reset();
+		quick_panel.reset();
 	}
-	if (changed) { page_slide.after_draw(gfx.pixels.data(), test_now); }
+	if (changed && !panel_height) { page_slide.after_draw(gfx.pixels.data(), test_now); }
 	if (changed || alert_frame.refresh) { present(renderer, texture); }
 }
 
@@ -306,7 +315,8 @@ void usage(const char *program) {
 	std::printf("  --screenshot P   write the final canvas to a PPM image\n");
 	std::printf("  --left-display   center on the leftmost monitor and fit its work area\n");
 	std::printf("  --minimized      start minimized\n");
-	std::printf("Mouse: click tap, drag swipe/scroll, hold 1.2s settings, wheel pages\n");
+	std::printf("Mouse: click tap, drag swipe/scroll, hold 1.2s settings, wheel pages or settings rows\n");
+	std::printf("Arrows: left/right switch pages, up/down scroll or open tools\n");
 	std::printf("Keys:  0..7 pages/tools, n alert, r route, u pickup wake, p snapshot, q/ESC quit\n");
 	std::printf("Terminal: type a USB command and press Enter (try: mood names, mood glow, help)\n");
 	std::printf("Window: press Enter to type a command there instead; replies appear in the terminal\n");
@@ -384,7 +394,7 @@ static SDL_Window *startup_window() {
 	const int display = startup_display();
 	int scale = SCALE;
 	SDL_Rect usable{};
-	if (start_left && SDL_GetDisplayUsableBounds(display, &usable) == 0) {
+	if (SDL_GetDisplayUsableBounds(display, &usable) == 0) {
 		const int fit = std::min(usable.w / LCD_W, (usable.h - 48) / LCD_H);
 		scale = std::max(1, std::min(scale, fit));
 	}

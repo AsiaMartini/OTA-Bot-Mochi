@@ -10,7 +10,7 @@
 class DeskTimer {
 	uint32_t last = 0;
 public:
-	static constexpr uint8_t BREAK = 5, CUSTOM = 6, STOPWATCH = 7, MODES = 8;
+	static constexpr uint8_t FIVE_MINUTES = 0, BREAK = 5, CUSTOM = 6, STOPWATCH = 7, MODES = 8;
 	static constexpr uint32_t LENGTH[MODES] = {300000, 900000, 1500000, 180000, 600000, 1800000, 0, 0};
 	static constexpr uint32_t MINUTE = 60000, CUSTOM_MAX = 180 * MINUTE;
 	uint32_t custom = 10 * MINUTE;	/**< Custom countdown length, 1..180 min, RAM-only. */

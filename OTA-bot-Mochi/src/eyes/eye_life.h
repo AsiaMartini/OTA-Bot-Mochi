@@ -69,8 +69,8 @@ class EyeLife {
 		}
 		return true;
 	}
-	/** @brief Blend explicit affection and pickup feedback without replacing a face or palette. */
-	bool feedback(const EyeState &st, uint32_t now, uint32_t dt) {
+	/** @brief Blend explicit affection and a buoyant pickup pose into the current eyes. */
+	bool feedback(const EyeState &st, uint32_t now, uint32_t dt, bool waking, float amount) {
 		if (st.dizzyUntilMs) { comfort = 0; return false; }
 		bool pet = st.petUntilMs && int32_t(st.petUntilMs - now) > 0;
 		float alpha = float(dt > 100 ? 100 : dt) / (180 + float(dt > 100 ? 100 : dt));
@@ -78,12 +78,12 @@ class EyeLife {
 		if (!pet && comfort < 0.005f) { comfort = 0; }
 		frame.openL *= 1 - comfort * 0.38f; frame.openR *= 1 - comfort * 0.38f;
 		frame.scaleX += comfort * 0.025f; frame.scaleY -= comfort * 0.025f;
-		bool waking = !st.tracking && !pet && !comfort && st.wakeUntilMs && int32_t(st.wakeUntilMs - now) > 0;
 		if (waking) {
-			float p = 1 - float(uint32_t(st.wakeUntilMs - now)) / 1400;
-			float open = 0.55f + 0.45f * ease(p / 0.6f);
-			frame.openL *= open; frame.openR *= open;
-			frame.scaleY += sinf(3.14159265f * p) * 0.08f;
+			const float p = 1 - float(uint32_t(st.wakeUntilMs - now)) / EYE_PICKUP_REACTION_MS;
+			const float lift = sinf(3.14159265f * p) * amount;
+			frame.y -= int16_t(lift * 14);
+			frame.scaleX += lift * 0.09f;
+			frame.scaleY -= lift * 0.06f;
 		}
 		return pet || comfort > 0 || waking;
 	}
@@ -185,14 +185,18 @@ public:
 	/** @brief Advance without drawing or I/O. @param cfg Target. @param st Raw gaze/blink. @param now Time. @param dt Bounded delta. @param mode Calm/Dasai/playful. @param amount Intensity. @param choice Random input. @param allow_idle Start idle gestures unless a handoff is due. @param motion Enable tilt feedback. */
 	void step(const EyeConfig &cfg, const EyeState &st, uint32_t now, uint32_t dt,
 		uint8_t mode, float amount, uint32_t choice, bool allow_idle = true, bool motion = false) {
+		const bool waking = !st.tracking && !st.dizzyUntilMs &&
+			!(st.petUntilMs && int32_t(st.petUntilMs - now) > 0) &&
+			st.wakeUntilMs && int32_t(st.wakeUntilMs - now) > 0;
+		const Expression desired = waking ? st.wakeExpression : cfg.expression;
 		if (!frame.active || style != cfg.style) {
-			reset(); frame.active = true; style = cfg.style; frame.expression = target = cfg.expression; idle_at = now;
+			reset(); frame.active = true; style = cfg.style; frame.expression = target = desired; idle_at = now;
 			frame.variationSeed = choice ? choice : 1; variation_at = now;
 			arm_idle(now, choice, mode, amount);
 		}
-		if (cfg.expression != target) {
+		if (desired != target) {
 			fromL = frame.openL; fromR = frame.openR; change_at = now;
-			target = cfg.expression; changing = true; gesturing = false; idle_at = now;
+			target = desired; changing = true; gesturing = false; idle_at = now;
 			pending_seed = choice ? choice : 1;
 			arm_idle(now, choice, mode, amount);
 		}
@@ -210,7 +214,7 @@ public:
 			float open = p < 1 ? 1 - sinf(3.14159265f * p) : 1;
 			frame.openL *= open; frame.openR *= open;
 		}
-		bool responding = feedback(st, now, dt);
+		bool responding = feedback(st, now, dt, waking, amount);
 		bool playful = mode && !responding && !st.dizzyUntilMs && ordinary(frame.expression) && ordinary(cfg.expression);
 		bool expressive = playful && !changing;
 		responding = interact(st, now, amount, expressive, motion) || responding;

@@ -27,6 +27,8 @@ int8_t touch_poll(uint32_t now);
 bool touch_pressed();
 /** @brief Read the held logical contact without consuming tap, pet, hold or swipe events. */
 bool touch_position(int16_t &x, int16_t &y);
+/** @brief Consume a valid endpoint explicitly reported on lift-off without affecting tap recognition. */
+bool touch_take_release_position(int16_t &x, int16_t &y);
 
 /** @brief Consume one short tap. @param x Output X. @param y Output Y. @return Tap available. */
 bool touch_take_tap(int16_t &x, int16_t &y);

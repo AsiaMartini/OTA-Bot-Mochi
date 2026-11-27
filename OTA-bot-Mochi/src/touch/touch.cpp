@@ -15,6 +15,8 @@ static SwipeTracker s_swipe;
 static uint8_t s_address = 0;
 static uint32_t s_lastPoll = 0;
 static bool s_pressed = false;
+static bool s_release = false;
+static int16_t s_release_x = 0, s_release_y = 0;
 static bool s_flipped = false;
 static TouchActions s_actions;
 
@@ -85,6 +87,7 @@ int8_t touch_poll(uint32_t now) {
 		return 0;
 	}
 	s_lastPoll = now;
+	s_release = false;
 	uint8_t data[5];
 	if (!read_contact(data)) {
 		s_pressed = false;
@@ -93,7 +96,8 @@ int8_t touch_poll(uint32_t now) {
 		return 0;
 	}
 	uint8_t count = data[0] & 0x0F;
-	bool touching = count == 1 && (data[1] >> 6) != 1;
+	const bool released = (data[1] >> 6) == 1;
+	bool touching = count == 1 && !released;
 	int16_t x = ((data[1] & 0x0F) << 8) | data[2];
 	int16_t y = ((data[3] & 0x0F) << 8) | data[4];
 	if (touching && (x >= LCD_WIDTH || y >= LCD_HEIGHT)) {
@@ -102,10 +106,13 @@ int8_t touch_poll(uint32_t now) {
 		s_swipe.update(false, 0, 0, now);
 		return 0;
 	}
+	const bool lift = s_pressed && count <= 1 && released && (x || y) &&
+		x < LCD_WIDTH && y < LCD_HEIGHT;
 	if (s_flipped) {
 		x = int16_t(LCD_WIDTH - 1 - x);
 		y = int16_t(LCD_HEIGHT - 1 - y);
 	}
+	if (lift) { s_release = true; s_release_x = x; s_release_y = y; }
 	s_pressed = touching;
 	s_actions.update(touching, x, y, now);
 	if (s_actions.vertical) {
@@ -127,6 +134,14 @@ bool touch_pressed() { return s_pressed; }
 bool touch_position(int16_t &x, int16_t &y) {
 	if (!s_pressed) { return false; }
 	x = s_actions.x; y = s_actions.y;
+	return true;
+}
+
+bool touch_take_release_position(int16_t &x, int16_t &y) {
+	if (!s_release) { return false; }
+	s_release = false;
+	x = s_release_x;
+	y = s_release_y;
 	return true;
 }
 

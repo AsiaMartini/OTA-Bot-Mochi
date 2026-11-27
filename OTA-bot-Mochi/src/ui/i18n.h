@@ -9,6 +9,14 @@
 #define UI_TRANSLATIONS(X) \
 	UI_COMPANION_TRANSLATIONS(X) \
 	X(Eyes, "MOCHI", "MOCHI") \
+	X(QuickPanel, "QUICK CONTROLS", "COMANDI RAPIDI") \
+	X(QuickTimer, "Timer 5 min", "Timer 5 min") \
+	X(QuickTimerActive, "Open timer", "Apri timer") \
+	X(QuickFind, "Find phone", "Trova telefono") \
+	X(QuickStopFind, "Stop ringing", "Ferma squillo") \
+	X(QuickMute, "Silent", "Silenzioso") \
+	X(QuickAndroidOnly, "Android only", "Solo Android") \
+	X(QuickPhoneOffline, "Phone offline", "Telefono scollegato") \
 	X(Clock, "CLOCK", "OROLOGIO") \
 	X(MusicVolume, "VOLUME", "VOLUME") \
 	X(Music, "MUSIC", "MUSICA") \

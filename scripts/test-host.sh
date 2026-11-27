@@ -66,6 +66,10 @@ g++ -std=c++17 -Wall -Wextra -Werror -I "$root/tests/stubs" -DMOCHI_BOARD_AMOLED
 	"$root/OTA-bot-Mochi/src/touch/touch.cpp" "$root/OTA-bot-Mochi/src/power/backlight.cpp" \
 	"$root/OTA-bot-Mochi/src/sound/buzzer_output.cpp" "$root/OTA-bot-Mochi/src/power/battery.cpp"
 build_test swipe "$root/tests/swipe_test.cpp"
+quick_panel=("$root/tests/quick_panel_test.cpp" "$root/OTA-bot-Mochi/src/ui/quick_panel.cpp"
+	"$root/OTA-bot-Mochi/src/ui/ui_theme.cpp" "$root/OTA-bot-Mochi/src/ui/i18n.cpp")
+build_test quick-panel-lcd "${quick_panel[@]}"
+build_test quick-panel-amoled -DMOCHI_BOARD_AMOLED_18 "${quick_panel[@]}"
 build_test pickup "$root/tests/pickup_test.cpp"
 touch=("$root/tests/touch_contact_test.cpp" "$root/OTA-bot-Mochi/src/touch/touch.cpp" "$root/OTA-bot-Mochi/src/bus/i2c_bus.cpp")
 build_test touch-contact-lcd "${touch[@]}"

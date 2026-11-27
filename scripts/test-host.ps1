@@ -71,6 +71,11 @@ try {
 		"$root\tests\stubs\imu_noop.cpp"
 	)
 	Invoke-HostTest 'swipe' @("$root\tests\swipe_test.cpp")
+	$quickPanel = @("$root\tests\quick_panel_test.cpp") + @('quick_panel.cpp', 'ui_theme.cpp', 'i18n.cpp').ForEach({
+		"$root\OTA-bot-Mochi\src\ui\$_"
+	})
+	Invoke-HostTest 'quick-panel-lcd' $quickPanel
+	Invoke-HostTest 'quick-panel-amoled' $quickPanel @('-DMOCHI_BOARD_AMOLED_18')
 	Invoke-HostTest 'pickup' @("$root\tests\pickup_test.cpp")
 	$touch = @("$root\tests\touch_contact_test.cpp", "$root\OTA-bot-Mochi\src\touch\touch.cpp", "$root\OTA-bot-Mochi\src\bus\i2c_bus.cpp")
 	Invoke-HostTest 'touch-contact-lcd' $touch

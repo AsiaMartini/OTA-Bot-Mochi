@@ -13,6 +13,7 @@
 #include "../OTA-bot-Mochi/src/eyes/eyes_api.h"
 #include "../OTA-bot-Mochi/src/eyes/eyes_faces.h"
 #include "../OTA-bot-Mochi/src/settings/settings_menu.h"
+#include "../OTA-bot-Mochi/src/ui/quick_panel_runtime.h"
 #include "../OTA-bot-Mochi/src/ui/ui_theme.h"
 #include "../OTA-bot-Mochi/src/ui/view_state.h"
 #include <cstdio>
@@ -36,11 +37,16 @@ void advance_flick() {
 	} else { finger = false; flick_left = 0; flick_dir = 0; }
 }
 
-/** @brief Start a synthetic vertical flick, used by the mouse wheel. @param dir -1 moves up, +1 down. */
+/** @brief Start a synthetic vertical flick for contextual scrolling. @param dir -1 moves up, +1 down. */
 void begin_flick(int8_t dir) {
 	if (finger || flick_left) { return; }
 	flick_dir = dir;
 	flick_left = 4;
+}
+
+/** @brief Use the same carousel and transition as a horizontal drag. */
+void navigate_carousel(int8_t step, uint32_t now) {
+	switch_screen(screens_swipe(page, step), now, step);
 }
 
 /** @brief Clamp SDL's already-logical event coordinates. @param lx Logical X. @param ly Logical Y. */
@@ -109,6 +115,15 @@ void handle_key(SDL_Keycode key, bool &running) {
 	if (key == SDLK_n) { inject_notification(); return; }
 	if (key == SDLK_r) { toggle_route(); return; }
 	if (key == SDLK_u) { eyes_wake(test_now); return; }
+	if (key == SDLK_LEFT || key == SDLK_RIGHT) {
+		if (!finger && !flick_left && !screens_calling()) { navigate_carousel(key == SDLK_RIGHT ? 1 : -1, test_now); }
+		return;
+	}
+	if (key == SDLK_UP || key == SDLK_DOWN) {
+		const int8_t direction = key == SDLK_UP ? -1 : 1;
+		if (!screens_calling()) { begin_flick(page == UiPage::Settings ? -direction : direction); }
+		return;
+	}
 	static const UiPage jump[] = {UiPage::Eyes, UiPage::Clock, UiPage::Music, UiPage::Navigation,
 		UiPage::Notification, UiPage::Weather, UiPage::Settings, UiPage::Desk};
 	if (key >= SDLK_0 && key <= SDLK_7) { switch_screen(jump[key - SDLK_0], test_now); }
@@ -170,9 +185,27 @@ Gesture take_gesture() {
 }
 
 void handle_touch(uint32_t now) {
-	eyes_follow(finger_x, finger_y, finger && page == UiPage::Eyes && !screens_calling(), now);
+	const bool on_eyes = page == UiPage::Eyes && !screens_calling();
+	const bool panel_tap = quick_panel_gesture.takes_tap();
+	const bool panel_input = on_eyes &&
+		quick_panel_gesture.sample(finger, finger_x, finger_y, now, LCD_H, ui_s(QuickPanelGesture::EdgeSize));
+	eyes_follow(finger_x, finger_y, finger && on_eyes && !panel_input, now);
 	const Gesture g = take_gesture();
 	if (g.tap) { dismiss_notification_glow(); }
+	if (panel_input) {
+		if (!g.tap || !panel_tap || !quick_panel_gesture.interactive(now, LCD_H)) { return; }
+		switch (QuickPanel::hit(g.x, g.y, LCD_W, LCD_H)) {
+		case QuickAction::Timer:
+			quick_controls::start_timer(now);
+			switch_screen(UiPage::Timer, now);
+			break;
+		case QuickAction::Phone: quick_controls::find_phone(settings_get().phone_ios); break;
+		case QuickAction::Sound: toggle_quick_sound(now); break;
+		case QuickAction::Close: quick_panel_gesture.close(now, LCD_H); break;
+		case QuickAction::None: break;
+		}
+		return;
+	}
 	if (g.tap && g.y < 50 && !screens_calling() && page != UiPage::Eyes && page != UiPage::Settings) {
 		toggle_quick_sound(now);
 		return;
@@ -210,7 +243,7 @@ void handle_touch(uint32_t now) {
 		}
 	}
 	if (!g.step) { return; }
-	switch_screen(screens_swipe(page, g.step), now, g.step);
+	navigate_carousel(g.step, now);
 }
 
 void handle_event(const SDL_Event &event, SDL_Renderer *, bool &running) {
@@ -218,6 +251,7 @@ void handle_event(const SDL_Event &event, SDL_Renderer *, bool &running) {
 	if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
 		finger = false; flick_left = 0; flick_dir = 0; pending_step = 0;
 		actions = TouchActions{}; swipe = SwipeTracker{};
+		quick_panel_gesture.cancel_contact(test_now, LCD_H);
 		return;
 	}
 	if (event.type == SDL_TEXTINPUT && console) {
@@ -230,8 +264,16 @@ void handle_event(const SDL_Event &event, SDL_Renderer *, bool &running) {
 		mouse_contact(event);
 		return;
 	}
-	if (event.type == SDL_MOUSEWHEEL && event.wheel.y) {
-		begin_flick(event.wheel.y > 0 ? -1 : 1);
+	if (event.type == SDL_MOUSEWHEEL) {
+		if (finger || flick_left || screens_calling()) { return; }
+		const int dir = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1;
+		if (event.wheel.x) {
+			navigate_carousel(event.wheel.x > 0 ? dir : -dir, test_now);
+		} else if (event.wheel.y) {
+			const int8_t step = event.wheel.y > 0 ? -dir : dir;
+			if (page == UiPage::Settings) { begin_flick(-step); }
+			else { navigate_carousel(step, test_now); }
+		}
 		return;
 	}
 	if (event.type == SDL_KEYDOWN) { handle_key(event.key.keysym.sym, running); }

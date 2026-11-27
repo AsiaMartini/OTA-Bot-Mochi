@@ -73,6 +73,7 @@ $sources = @(
 	'OTA-bot-Mochi/src/eyes/eye_lids.cpp',
 	'OTA-bot-Mochi/src/ui/view_state.cpp',
 	'OTA-bot-Mochi/src/ui/ui_theme.cpp',
+	'OTA-bot-Mochi/src/ui/quick_panel.cpp',
 	'OTA-bot-Mochi/src/ui/ui_state.cpp',
 	'OTA-bot-Mochi/src/ui/i18n.cpp',
 	'OTA-bot-Mochi/src/ui/weather_sync.cpp',

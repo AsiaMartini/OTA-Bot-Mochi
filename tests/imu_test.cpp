@@ -142,7 +142,7 @@ static void continuous_shake_recovery() {
 	i2c_bus().read_ok = true;
 }
 
-/** @brief Replay a pickup through the actual shared-bus driver, preserving settings and flash. */
+/** @brief Replay tilted and gentle straight pickups through the shared-bus driver. */
 static void pickup_driver_tests() {
 	for (bool flipped : {false, true}) {
 		for (bool enabled : {false, true}) {
@@ -154,8 +154,11 @@ static void pickup_driver_tests() {
 			assert(settings_update(p)); eyes_imu_init();
 			unsigned writes = test_flash_writes;
 			for (uint32_t t = 50; t <= 2200; t += 50) {
-				int16_t x = t >= 1550 ? 819 : 0;
+				int16_t x = t >= 1550 && !flipped ? 819 : 0;
 				int16_t z = t == 1450 || t == 1500 ? 2662 : (t >= 1550 ? 1877 : 2048);
+				if (flipped) {
+					z = t >= 1400 && t <= 1500 ? 2202 : (t >= 1650 && t <= 1750 ? 1905 : 2048);
+				}
 				axis(0x35, x); axis(0x37, 0); axis(0x39, z);
 				test_now = 300000 + t; eyes_imu_poll(test_now);
 				if (t < 1400) { assert(!eyes_state().wakeUntilMs); }

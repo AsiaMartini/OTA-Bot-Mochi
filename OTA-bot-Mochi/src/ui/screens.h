@@ -53,6 +53,9 @@ UiPage screens_scroll(UiPage page, int8_t scroll);
 
 /** @brief Force utility screen redraw on entry. */
 void screens_invalidate();
+struct UiStatusBar;
+/** @brief Read the latest status row values for the quick panel after drawing the screen. */
+const UiStatusBar &screens_status_bar();
 /** @brief Act only on the displayed snapshot, ignoring taps overtaken by incoming data. @param action Newer (-1), dismiss (0), older (+1). */
 void screens_alert_action(int8_t action);
 /**

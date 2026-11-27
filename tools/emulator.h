@@ -10,6 +10,7 @@
 #include "ChronosESP32.h"
 #include "../OTA-bot-Mochi/pin_config.h"
 #include "../OTA-bot-Mochi/src/ui/auto_page.h"
+#include "../OTA-bot-Mochi/src/ui/quick_panel_gesture.h"
 #include "../OTA-bot-Mochi/src/ui/screens.h"
 #include "../OTA-bot-Mochi/src/touch/swipe.h"
 #include "../OTA-bot-Mochi/src/touch/touch_actions.h"
@@ -26,6 +27,7 @@ extern ChronosESP32 watch;
 extern UiPage page;
 extern SwipeTracker swipe;
 extern TouchActions actions;
+extern QuickPanelGesture quick_panel_gesture;
 extern int8_t pending_step;
 extern bool finger;
 extern int16_t finger_x, finger_y;

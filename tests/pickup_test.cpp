@@ -21,6 +21,30 @@ static unsigned lift(PickupPolicy &p, uint32_t start, bool enabled = true, bool 
 	return events;
 }
 
+/** @brief Test a straight lift as well as a much shorter tap-like bump. */
+static unsigned vertical_lift(uint32_t brake_at, bool gradual = false) {
+	PickupPolicy p;
+	unsigned events = 0;
+	for (uint32_t t = 0; t <= 2000; t += 50) {
+		float z = t == 1400 ? 1.3f : t == brake_at ? 0.8f : 1.0f;
+		if (gradual && t == 1350) { z = 1.13f; }
+		events += p.update(0, 0, z, t, true);
+	}
+	return events;
+}
+
+/** @brief A gentle lift changes acceleration without changing the parked angle. */
+static unsigned gentle_lift(float direction) {
+	PickupPolicy p;
+	unsigned events = 0;
+	for (uint32_t t = 0; t <= 2200; t += 50) {
+		float impulse = (t >= 1400 && t <= 1500) ? 0.075f : 0;
+		if (t >= 1650 && t <= 1750) { impulse = -0.07f; }
+		events += p.update(0, 0, 1 + direction * impulse, t, true);
+	}
+	return events;
+}
+
 int main() {
 	for (uint32_t start : {0u, UINT32_MAX - 1600}) {
 		PickupPolicy p;
@@ -29,6 +53,11 @@ int main() {
 		assert(lift(p, start + 8050) == 1);
 	}
 	PickupPolicy p;
+	assert(vertical_lift(1550) == 1);
+	assert(vertical_lift(1550, true) == 1);
+	assert(vertical_lift(1450) == 0);
+	assert(gentle_lift(1) == 1);
+	assert(gentle_lift(-1) == 0);
 	assert(lift(p, 0, false) == 0);
 	p.reset(); assert(lift(p, 0, true, false) == 0);
 	p.reset();

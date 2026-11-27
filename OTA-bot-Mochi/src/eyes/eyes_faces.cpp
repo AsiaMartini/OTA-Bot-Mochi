@@ -124,7 +124,9 @@ void eyes_faces_step(uint32_t now) {
 
 /** @brief Pass bounded sensor data to the mood policy. @param x G. @param y G. @param z G. @param now Timestamp. */
 void eyes_faces_motion(float x, float y, float z, uint32_t now) {
-	bool ready = !eyes_state().tracking && eyes_faces_automatic_ready(now);
+	const auto &state = eyes_state();
+	const bool pickup = state.wakeUntilMs && int32_t(state.wakeUntilMs - now) > 0;
+	bool ready = !state.tracking && !pickup && eyes_faces_automatic_ready(now);
 	if (policy.automatic()) { ready = ready && FacePolicy::cycle_complete(eyes_config().expression, visible_elapsed(now)); }
 	policy.sample(x, y, z, now, settings_get().imu_faces && ready);
 }

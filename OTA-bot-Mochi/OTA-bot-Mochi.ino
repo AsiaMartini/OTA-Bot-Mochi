@@ -24,6 +24,8 @@
 #include "src/clock/clock_ui.h"
 #include "src/ui/screens.h"
 #include "src/ui/page_slide.h"
+#include "src/ui/quick_panel_runtime.h"
+#include "src/ui/quick_panel_gesture.h"
 #include "src/ui/notification_glow.h"
 #include "src/ui/music_transport.h"
 #include "src/ui/auto_page.h"
@@ -75,6 +77,8 @@ Arduino_CO5300 *display = new Arduino_CO5300(bus, LCD_RST, 0,
 Arduino_Canvas *gfx = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, display);
 UiPage current_screen = UiPage::Eyes;
 PageSlide page_slide(ps_malloc);
+QuickPanel quick_panel;
+QuickPanelGesture quick_panel_gesture;
 notification_glow::Pulse notification_pulse;
 AutoPagePolicy auto_page;
 bool screen_ready = false;
@@ -226,10 +230,12 @@ void init_screen() {
  */
 void switch_screen(UiPage page, uint32_t now, int8_t direction = 0);
 void switch_screen(UiPage page, uint32_t now, int8_t direction) {
-	if (page != current_screen && !screens_calling()) {
+	if (page != current_screen && !screens_calling() && !quick_panel.visible_height()) {
 		if (!direction) { direction = uint8_t(page) > uint8_t(current_screen) ? 1 : -1; }
 		page_slide.request(gfx->getFramebuffer(), direction);
 	} else { page_slide.reset(); }
+	quick_panel.reset();
+	quick_panel_gesture.reset();
 	current_screen = page;
 	gfx->fillScreen(UI_BG);
 	screens_invalidate();
@@ -262,6 +268,20 @@ void toggle_quick_sound(uint32_t now) {
 	if (value.sound) { sound_request(SoundCue::Tap, now); }
 }
 
+/** @brief Run the released tap on the open quick panel through the regular feature handlers. */
+void handle_quick_action(int16_t x, int16_t y, uint32_t now) {
+	switch (QuickPanel::hit(x, y, LCD_WIDTH, LCD_HEIGHT)) {
+	case QuickAction::Timer:
+		quick_controls::start_timer(now);
+		switch_screen(UiPage::Timer, now);
+		break;
+	case QuickAction::Phone: quick_controls::find_phone(ios_mode_boot); break;
+	case QuickAction::Sound: toggle_quick_sound(now); break;
+	case QuickAction::Close: quick_panel_gesture.close(now, LCD_HEIGHT); break;
+	case QuickAction::None: break;
+	}
+}
+
 uint32_t last_input = 0;	/**< Last touch, BOOT press or automatic page change, for the return to Eyes. */
 
 /**
@@ -272,11 +292,16 @@ uint32_t last_input = 0;	/**< Last touch, BOOT press or automatic page change, f
 void handle_touch(uint32_t now) {
 	int8_t step = touch_poll(now);
 	int16_t follow_x = 0, follow_y = 0;
-	bool following = touch_position(follow_x, follow_y) && current_screen == UiPage::Eyes &&
-		!starting && !shutting_down && !screens_calling();
-	eyes_follow(follow_x, follow_y, following, now);
+	const bool touching = touch_position(follow_x, follow_y);
+	const bool lift = !touching && touch_take_release_position(follow_x, follow_y);
+	const bool on_eyes = current_screen == UiPage::Eyes && !starting && !shutting_down && !screens_calling();
+	const bool panel_tap = quick_panel_gesture.takes_tap();
+	const bool panel_input = on_eyes &&
+		quick_panel_gesture.sample(touching, follow_x, follow_y, now, LCD_HEIGHT,
+			ui_s(QuickPanelGesture::EdgeSize), lift);
+	eyes_follow(follow_x, follow_y, touching && on_eyes && !panel_input, now);
 	bool hold = touch_take_hold();
-	int16_t x, y;
+	int16_t x = 0, y = 0;
 	bool tap = touch_take_tap(x, y);
 	if (tap && notification_glow::Supported) { notification_pulse.dismiss(ui_page_events().notifications); }
 	bool dbl = touch_take_double();
@@ -290,6 +315,10 @@ void handle_touch(uint32_t now) {
 		last_input = now; backlight_activity(now); switch_screen(boot_target, now); return;
 	}
 	if (starting || shutting_down) { return; }
+	if (panel_input) {
+		if (tap && panel_tap && quick_panel_gesture.interactive(now, LCD_HEIGHT)) { handle_quick_action(x, y, now); }
+		return;
+	}
 	if (tap && y < 50 && !screens_calling() && current_screen != UiPage::Eyes &&
 		current_screen != UiPage::Settings) {
 		toggle_quick_sound(now);
@@ -512,21 +541,26 @@ void loop() {
 #endif
 	auto *pixels = gfx->getFramebuffer();
 	const auto alert = notification_pulse.update(events.notifications, now);
+	int16_t panel_height = quick_panel_gesture.height(now, LCD_HEIGHT);
+	if (panel_height) { page_slide.reset(); }
 	bool changed = page_slide.paint(pixels, now, applied_flip);
 	if (!changed) {
 		changed = screens_draw(gfx, watch, current_screen, now, pixels, applied_flip);
 		if (current_screen == UiPage::Eyes && !screens_calling()) {
-			if (changed) { eyes_state().dirtyInit = false; }
-			eyes_update(now);
-			changed = true;
+			changed = quick_controls::draw_home(quick_panel, gfx, pixels, now, changed,
+				panel_height, applied_flip, ios_mode_boot);
+		} else {
+			quick_panel_gesture.reset();
+			quick_panel.reset();
+			panel_height = 0;
 		}
-		if (changed) { page_slide.after_draw(pixels, now, applied_flip); }
+		if (changed && !panel_height) { page_slide.after_draw(pixels, now, applied_flip); }
 	}
 #if MOCHI_RUNTIME_DIAGNOSTICS
 	uint32_t draw_finished = micros();
 #endif
 	const bool present = changed || alert.refresh;
-	if (present) { flush_ui(pixels, alert); }
+	if (present) { flush_ui(pixels, panel_height ? notification_glow::Frame{} : alert); }
 #if MOCHI_RUNTIME_DIAGNOSTICS
 	runtime_diagnostics::metrics.record(draw_started, draw_finished, present ? micros() : draw_finished);
 #endif

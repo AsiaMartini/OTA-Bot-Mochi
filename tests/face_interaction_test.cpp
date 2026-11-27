@@ -254,9 +254,14 @@ static void affection_and_wake(int w, int h) {
 		for (unsigned i = 0; i < 150; ++i) { test_now += 33; eyes_update(test_now); }
 		assert(eyes_life_frame().openL > 0.99f);
 		eyes_wake(test_now); assert(eyes_state().wakeUntilMs);
-		test_now += 33; eyes_update(test_now);
-		assert(eyes_life_frame().openL < 0.7f);
+		for (unsigned i = 0; i < 12; ++i) { test_now += 33; eyes_update(test_now); }
+		assert(eyes_life_frame().expression == HAPPY);
+		assert(eyes_life_frame().scaleX > 1.04f && eyes_life_frame().scaleY < 0.98f);
+		assert(eyes_config().expression == NEUTRAL);
 		auto dirty = gfx.pixels; eyes_state().dirtyInit = false; eyes_draw(); assert(dirty == gfx.pixels);
+		for (unsigned i = 0; i < 48; ++i) { test_now += 33; eyes_update(test_now); }
+		assert(!eyes_state().wakeUntilMs && eyes_life_frame().expression == NEUTRAL);
+		eyes_wake(test_now); assert(eyes_state().wakeUntilMs);
 		eyes_follow(w / 2, h / 2, true, test_now); assert(!eyes_state().wakeUntilMs);
 		eyes_follow(0, 0, false, test_now);
 		for (unsigned i = 0; i < 60; ++i) { test_now += 33; eyes_update(test_now); }

@@ -25,6 +25,7 @@
 #include "eyes_api.h"
 #include "eyes_faces.h"
 #include "eye_life.h"
+#include "face_filter.h"
 #include "../settings/settings.h"
 #include "../../pin_config.h"
 #include <Arduino.h>
@@ -400,7 +401,10 @@ void eyes_follow(int16_t x, int16_t y, bool touching, uint32_t nowMs) {
 void eyes_wake(uint32_t nowMs) {
 	if (!settings_get().imu_faces || s_state.tracking || s_state.dizzyUntilMs ||
 		(s_state.petUntilMs && int32_t(s_state.petUntilMs - nowMs) > 0)) { return; }
-	s_state.wakeUntilMs = nowMs + 1400;
+	const auto &filter = face_filter();
+	s_state.wakeExpression = filter.allows(HAPPY) ? HAPPY :
+		filter.allows(ARC_HAPPY) ? ARC_HAPPY : s_cfg.expression;
+	s_state.wakeUntilMs = nowMs + EYE_PICKUP_REACTION_MS;
 }
 
 /**

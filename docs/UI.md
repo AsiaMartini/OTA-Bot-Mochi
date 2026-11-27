@@ -5,11 +5,16 @@
 The living eyes remain the default screen. Utility screens use a black background,
 rounded tinted cards, eye-colored text and icons, and dimmer secondary labels.
 The eye color is the shared primary color, including controls, calls, and weather.
-Eight position dots indicate the selected
-screen; the header shows a speaker icon (crossed out while sound is off or
-night-muted), Bluetooth state, and the battery percentage (`--%` until a
-plausible reading exists). While the PMU reports a stable charging state, the
-percentage uses the accent color and a battery-with-bolt icon appears beside it.
+Eight position dots indicate the selected screen. The header shows a speaker
+icon (crossed out while sound is off or night-muted) and a battery outline
+containing its percentage (`--%` until a plausible reading exists). On AMOLED
+the percentage uses right-aligned, fixed-width Inter Medium digits. The battery
+outline and its inset bolt use cyan while the PMU reports charging. The bolt is
+hidden at 100%. A slashed
+phone appears after 2.5 seconds of disconnection and clears as soon as the phone
+reconnects. A running countdown appears in a centered, borderless card. The
+same status row is shown in the open Quick controls panel. On AMOLED it is
+inset from the rounded top corners.
 Stable charge start/stop and percentage changes invalidate the header immediately,
 without waiting for a phone packet or a page change. The
 configured backlight percentage is shown on the DEVICE STATUS page, not in the
@@ -130,6 +135,13 @@ actions. Calm disables them; dashboard/night reduce their intensity.
 - Swipe left/right through Eyes, Clock, Music, Route, Alerts, Weather, Drive and
   Settings; swipe down on Drive for the DRIVE TOOLS menu. See
   [Drive dashboard](DESK.md#drive-dashboard).
+- On Eyes, pull down from the top-edge handle to open **Quick controls**.
+  Two fixed eye-colored halos appear once the panel settles. Swipe up or flick
+  upward to close, or tap anywhere along the bottom strip. **Timer 5 min** starts
+  the desk timer and opens its page. If a timer or stopwatch is already running,
+  **Open timer** shows it without resetting it. **Find phone** rings a connected
+  Android phone through Chronos and can stop it again. **Silent** toggles the
+  master sound setting in RAM, like the status strip.
 - Vertical swipes follow the contextual layers: swipe **down** on Clock to open
   Scrivania (desk tools), then **down** again for **Games / Giochi** (D&D dice,
   Pong and Tris). Swipe **up** from a game to Games, from Games or a desk tool
@@ -163,11 +175,11 @@ actions. Calm disables them; dashboard/night reduce their intensity.
 - Recognized petting strokes also ease the eyelids into a relaxed pose. Repeated
   strokes sustain it; after the last stroke, the gaze and lids return smoothly.
   This visual feedback works in Calm too and never adds pupils or changes ink.
-- With IMU faces enabled, a quiet-to-motion-to-settled change of pose can request
-  a brief pickup wake gesture. It opens the eyes gently without selecting a new
-  expression, changing saved preferences or adding sound. Live contact,
-  affection and Dizzy take priority; full-screen scenes retain their origin.
-  This is a conservative motion heuristic, not proof that the robot was lifted.
+- With IMU faces enabled, lifting Mochi triggers a brief smiling bounce, then
+  restores the previous expression. The motion filter looks for rest, a lift
+  with braking or a change of pose, and a quiet stop. This reaction preserves
+  saved preferences and stays silent. Live contact, affection and Dizzy take
+  priority.
 - Double-tap quickly on Eyes for a playful face from a separate excited/star
   pool, with the same glance toward your finger. Dizzy keeps priority.
 - Stroke vertically in either direction on Eyes to pet Mochi: a single

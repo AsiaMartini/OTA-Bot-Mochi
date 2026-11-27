@@ -7,8 +7,11 @@
 #include "../OTA-bot-Mochi/src/eyes/eyes_api.h"
 #include "../OTA-bot-Mochi/src/settings/usb_commands.h"
 #include "../OTA-bot-Mochi/src/settings/settings.h"
+#include "../OTA-bot-Mochi/src/settings/settings_menu.h"
+#include "../OTA-bot-Mochi/src/sound/sound.h"
 #include "../OTA-bot-Mochi/src/ui/notification_glow.h"
 #include "../OTA-bot-Mochi/src/ui/ui_theme.h"
+#include "../OTA-bot-Mochi/src/ui/view_state.h"
 #include "../OTA-bot-Mochi/src/ui/alert_layout.h"
 #include <cassert>
 #include <cstdio>
@@ -34,6 +37,40 @@ static void reset_contact() {
 	finger = false; pending_step = 0; flick_left = 0;
 	actions = TouchActions{}; swipe = SwipeTracker{};
 	switch_screen(UiPage::Eyes, test_now);
+}
+
+/** @brief Exercise carousel shortcuts, contextual scrolling and the demo route. */
+static void navigation_controls() {
+	reset_contact();
+	bool running = true;
+	SDL_Event key{}; key.type = SDL_KEYDOWN; key.key.keysym.sym = SDLK_RIGHT;
+	handle_event(key, nullptr, running);
+	assert(page == UiPage::Clock);
+	key.key.keysym.sym = SDLK_LEFT;
+	handle_event(key, nullptr, running);
+	assert(page == UiPage::Eyes);
+	SDL_Event wheel{}; wheel.type = SDL_MOUSEWHEEL; wheel.wheel.y = -1;
+	handle_event(wheel, nullptr, running);
+	assert(page == UiPage::Clock);
+	wheel.wheel.y = 0; wheel.wheel.x = 1; wheel.wheel.direction = SDL_MOUSEWHEEL_FLIPPED;
+	handle_event(wheel, nullptr, running);
+	assert(page == UiPage::Eyes);
+	key.key.keysym.sym = SDLK_6;
+	handle_event(key, nullptr, running);
+	assert(page == UiPage::Settings);
+	assert(settings_menu_tap(ui_s(200), ui_s(70)) == MenuAction::Changed);
+	wheel.wheel.x = 0; wheel.wheel.y = -1; wheel.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+	handle_event(wheel, nullptr, running);
+	for (int i = 0; i < 4; ++i) { sample_touch(test_now += 20); handle_touch(test_now); }
+	assert(page == UiPage::Settings && settings_menu_scroll(-1) && !settings_menu_scroll(-1));
+	assert(settings_menu_tap(ui_s(30), ui_s(70)) == MenuAction::Changed);
+	key.key.keysym.sym = SDLK_r;
+	handle_event(key, nullptr, running);
+	handle_auto_page(test_now);
+	assert(page == UiPage::Navigation && ui_page_events().route_active);
+	handle_event(key, nullptr, running);
+	handle_auto_page(test_now);
+	assert(!ui_page_events().route_active);
 }
 
 /** @brief Check terminal line editing, CRLF, bounded input and real command execution. */
@@ -165,6 +202,53 @@ static void notification_key() {
 	std::puts("Notification key, ten-second ring, tap dismissal and alert actions passed");
 }
 
+/** @brief Exercise the modal swipes, master mute and timer through SDL mouse input. */
+static void quick_controls_input() {
+	reset_contact();
+	const int x = LCD_W / 2;
+	const auto pull = [&] {
+		mouse(SDL_MOUSEBUTTONDOWN, x, ui_s(8));
+		test_now += 80;
+		mouse(SDL_MOUSEBUTTONUP, x, ui_s(90));
+		test_now += 200;
+		assert(quick_panel_gesture.interactive(test_now, LCD_H));
+	};
+	pull();
+	mouse(SDL_MOUSEBUTTONDOWN, x, LCD_H - ui_s(12));
+	test_now += 35;
+	mouse(SDL_MOUSEBUTTONUP, x, LCD_H - ui_s(29));
+	test_now += 200;
+	assert(page == UiPage::Eyes && !quick_panel_gesture.height(test_now, LCD_H));
+	pull();
+	mouse(SDL_MOUSEBUTTONDOWN, LCD_W / 5, LCD_H - ui_s(40));
+	mouse(SDL_MOUSEBUTTONUP, LCD_W / 5, LCD_H - ui_s(40));
+	test_now += 200;
+	assert(page == UiPage::Eyes && !quick_panel_gesture.height(test_now, LCD_H));
+	pull();
+	const int row = (LCD_H - ui_s(128)) / 2 + ui_s(20);
+	const int mute_row = row + 2 * ui_s(44);
+	const auto saved = settings_get();
+	auto sound_on = saved;
+	sound_on.sound = true;
+	sound_on.sound_night_mute = false;
+	assert(settings_update(sound_on));
+	sound_init(test_now);
+	mouse(SDL_MOUSEBUTTONDOWN, x, mute_row);
+	mouse(SDL_MOUSEBUTTONUP, x, mute_row);
+	assert(page == UiPage::Eyes && !settings_get().sound && sound_status() == SoundStatus::Off);
+	assert(!sound_request(SoundCue::Test, test_now));
+	mouse(SDL_MOUSEBUTTONDOWN, x, mute_row);
+	mouse(SDL_MOUSEBUTTONUP, x, mute_row);
+	assert(page == UiPage::Eyes && settings_get().sound && sound_request(SoundCue::Test, test_now));
+	sound_init(test_now);
+	assert(settings_update(saved));
+	mouse(SDL_MOUSEBUTTONDOWN, x, row);
+	mouse(SDL_MOUSEBUTTONUP, x, row);
+	assert(page == UiPage::Timer && view_timer().running);
+	assert(view_timer().remaining == DeskTimer::LENGTH[DeskTimer::FIVE_MINUTES]);
+	view_reset();
+}
+
 /** @brief Run deterministic event-level input regressions. @return Success. */
 int main() {
 	display_lifecycle();
@@ -211,6 +295,8 @@ int main() {
 	assert(!finger && !actions.active && !actions.tap_armed);
 	handle_touch(test_now);
 	assert(!eyes_state().tracking);
+	navigation_controls();
+	quick_controls_input();
 	terminal_commands();
 	notification_key();
 	std::puts("Terminal command editing, CRLF, overflow recovery and execution passed");

@@ -186,6 +186,32 @@ inline bool draw(Arduino_GFX *gfx, const String &text, int16_t x, int16_t top,
 	return false;
 }
 
+/** @brief Paint compact Inter Medium numerals centered or right-aligned in fixed cells. */
+inline bool draw_inter_tabular(Arduino_GFX *gfx, const String &label, int16_t anchor,
+	int16_t center_y, uint16_t ink, uint16_t background, bool centered = false) {
+#if MOCHI_DISPLAY_CO5300 && LCD_WIDTH == 368 && LCD_HEIGHT == 448
+	constexpr int16_t factor = 208, baseline = 15;
+	const auto cell_width = [](char ch) { return ch == '%' ? 16 : ch == ':' ? 5 : 11; };
+	const auto &zero = detail::medium_glyphs[detail::index('0')];
+	const int16_t top = center_y - detail::scaled(baseline + zero.y + zero.height / 2, factor);
+	int16_t width = 0;
+	for (unsigned i = 0; i < label.length(); ++i) { width += cell_width(label[i]); }
+	int16_t x = anchor - (centered ? width / 2 : width);
+	const detail::Painter painter{gfx, top, x, int16_t(x + width), factor, baseline, ink, background};
+	for (unsigned i = 0; i < label.length(); ++i) {
+		const auto &glyph = detail::medium_glyphs[detail::index(label[i])];
+		const int16_t cell = cell_width(label[i]);
+		const int16_t pad = (cell - detail::scaled(glyph.width, factor)) / 2;
+		painter.glyph(glyph, detail::medium_bitmap, x + pad - detail::scaled(glyph.x, factor));
+		x += cell;
+	}
+	return true;
+#else
+	(void)gfx; (void)label; (void)anchor; (void)center_y; (void)ink; (void)background; (void)centered;
+	return false;
+#endif
+}
+
 /** @brief Draw a standard label with a known fallback background. */
 inline void label(Arduino_GFX *gfx, const String &text, int16_t x, int16_t top,
 	int16_t units, uint8_t size, uint16_t ink, uint16_t background) {

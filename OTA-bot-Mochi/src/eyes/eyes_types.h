@@ -398,9 +398,10 @@ struct EyeBackdropState {
 	bool leaving = false;
 };
 
-/**
- * @brief Mutable animation state singleton.
- */
+/** @brief Duration of the temporary pickup reaction in milliseconds. */
+constexpr uint32_t EYE_PICKUP_REACTION_MS = 1400;
+
+/** @brief Mutable animation state singleton. */
 struct EyeState {
 	EyeBackdropState backdrop; /**< Outgoing scenery, never persisted. */
 	float backdropOpacity = 1; /**< Frame-local backdrop fade; never applied to eye ink. */
@@ -423,6 +424,7 @@ struct EyeState {
 	bool tracking = false; /**< A live finger owns gaze, never persisted. */
 	uint32_t petUntilMs = 0; /**< Last recognized stroke's visual relaxation, RAM-only. */
 	uint32_t wakeUntilMs = 0; /**< Brief pickup wake gesture, RAM-only. */
+	Expression wakeExpression = HAPPY; /**< Temporary pickup expression, independent of the saved mood. */
 	uint32_t heartUntilMs;	/**< Expiry of the petting heart marker, 0 when idle. */
 	int16_t heartX;		/**< Center X of the petting heart marker. */
 	int16_t heartY;		/**< Top Y of the petting heart marker. */

@@ -308,7 +308,9 @@ Controls:
 - The mouse acts as one contact: a quick press is a tap, a stationary 1.2 s
   press is a hold (opens Settings from Eyes), a drag swipes horizontally and
   scrolls vertically, and a wiggly vertical stroke pets the eyes.
-- The mouse wheel flicks between carousel pages.
+- The mouse wheel changes carousel pages and scrolls rows in Settings.
+  Horizontal trackpad scrolling and the Left/Right keys change carousel pages.
+  Up/Down reproduces a vertical gesture for lists and contextual tools.
 - `0`..`6` open Eyes, Clock, Music, Route, Alerts, Weather, and Settings; `7`
   opens Desk tools.
 - `n` injects a notification (the auto page policy jumps to Alerts), `r` starts
